@@ -1,8 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
+	"os"
+	"sync"
+	"time"
 )
 
 func main() {
@@ -21,59 +25,61 @@ func main() {
 
 func handleConnection(client net.Conn) {
 	defer client.Close()
-	server, err := net.Dial("tcp", "mw03.lab.mattwilson.org:23")
+	server, err := net.DialTimeout("tcp", "vmesa.lab.mattwilson.org:23", 5*time.Second)
 	if err != nil {
 		panic(err)
 	}
 	defer server.Close()
 
-	clientIn := make(chan byte)
-	serverIn := make(chan byte)
-	clientDone := make(chan bool)
-	serverDone := make(chan bool)
+	clientdone := make(chan bool)
+	clientend := make(chan bool)
+	serverdone := make(chan bool)
+	serverend := make(chan bool)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go readAndFeed("client", client, server, &wg, clientend, clientdone)
+	go readAndFeed("server", server, client, &wg, serverend, serverdone)
 
-	go readAndFeed(client, clientIn, clientDone)
-	go readAndFeed(server, serverIn, serverDone)
-
-	var clientByte, serverByte byte
-mainloop:
-	for {
-		fmt.Println("Begin select")
-		select {
-		case clientByte = <-clientIn:
-			fmt.Printf("client byte: %02x\n", clientByte)
-			if _, err := server.Write([]byte{clientByte}); err != nil {
-				panic(err)
-			}
-		case serverByte = <-serverIn:
-			fmt.Printf("server byte: %02x\n", serverByte)
-			if _, err := client.Write([]byte{serverByte}); err != nil {
-				panic(err)
-			}
-		case <-serverDone:
-			fmt.Println("server done signal")
-			break mainloop
-		case <-clientDone:
-			fmt.Println("client done signal")
-			break mainloop
-		}
-		fmt.Println("End select")
+	select {
+	case <-serverdone:
+		fmt.Println("got serverdone")
+		clientend <- true
+	case <-clientdone:
+		fmt.Println("got clientdone")
+		serverend <- true
 	}
+
+	wg.Wait()
 }
 
-func readAndFeed(conn net.Conn, data chan byte, done chan bool) {
-	buffer := make([]byte, 256)
-	for {
-		n, err := conn.Read(buffer)
-		if err != nil {
-			fmt.Printf("read error: %v\n", err)
-			done <- true
-			return
-		}
-		fmt.Printf("read %d bytes\n", n)
-		for i := 0; i < n; i++ {
-			fmt.Printf("%d: %02x\n", i, buffer[i])
-			data <- buffer[i]
+func readAndFeed(name string, in, out net.Conn, wg *sync.WaitGroup, end, done chan bool) {
+	defer func() {
+		close(done)
+		in.SetReadDeadline(time.Time{})
+		fmt.Println("ending readAndFeed(): " + name)
+		wg.Done()
+	}()
+	buffer := make([]byte, 1024)
+	finish := false
+	for !finish {
+		select {
+		case <-end:
+			fmt.Printf("%s got end signal\n", name)
+			finish = true
+		default:
+			in.SetReadDeadline(time.Now().Add(time.Second))
+			n, err := in.Read(buffer)
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				continue
+			} else if err != nil {
+				fmt.Printf("read error: %v\n", err)
+				return
+			}
+			//fmt.Printf("read %d bytes\n", n)
+			if _, err := out.Write(buffer[:n]); err != nil {
+				fmt.Printf("write error: %v", err)
+				return
+			}
 		}
 	}
 }
