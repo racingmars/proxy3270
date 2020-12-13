@@ -9,25 +9,33 @@ import (
 	"time"
 )
 
-func main() {
-	ln, err := net.Listen("tcp", ":5433")
-	if err != nil {
-		panic(err)
-	}
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			// handle error
-		}
-		go handleConnection(conn)
-	}
-}
+// func main() {
+// 	ln, err := net.Listen("tcp", ":5433")
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	for {
+// 		conn, err := ln.Accept()
+// 		if err != nil {
+// 			// handle error
+// 		}
+// 		go handleConnection(conn)
+// 	}
+// }
 
 func handleConnection(client net.Conn) {
 	defer client.Close()
-	server, err := net.DialTimeout("tcp", "vmesa.lab.mattwilson.org:23", 5*time.Second)
+	err := proxy(client, "vmesa.lab.mattwilson.org:23")
 	if err != nil {
-		panic(err)
+		fmt.Println(err)
+	}
+	fmt.Println("Connection done")
+}
+
+func proxy(client net.Conn, target string) error {
+	server, err := net.DialTimeout("tcp", target, 15*time.Second)
+	if err != nil {
+		return err
 	}
 	defer server.Close()
 
@@ -50,6 +58,8 @@ func handleConnection(client net.Conn) {
 	}
 
 	wg.Wait()
+
+	return nil
 }
 
 func readAndFeed(name string, in, out net.Conn, wg *sync.WaitGroup, end, done chan bool) {
@@ -67,7 +77,7 @@ func readAndFeed(name string, in, out net.Conn, wg *sync.WaitGroup, end, done ch
 			fmt.Printf("%s got end signal\n", name)
 			finish = true
 		default:
-			in.SetReadDeadline(time.Now().Add(time.Second))
+			in.SetReadDeadline(time.Now().Add(time.Second / 2))
 			n, err := in.Read(buffer)
 			if errors.Is(err, os.ErrDeadlineExceeded) {
 				continue
