@@ -1,4 +1,4 @@
-module github.com/racingmars/goproxy
+module github.com/racingmars/proxy3270
 
 go 1.15
 

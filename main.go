@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/racingmars/go3270"
-	"github.com/racingmars/goproxy/db"
+	"github.com/racingmars/proxy3270/db"
 )
 
 func main() {
