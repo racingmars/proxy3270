@@ -1,0 +1,12 @@
+[
+    {
+        "name": "My MVS 3.8 System",
+        "host": "192.168.64.201",
+        "port": 3201
+    },
+    {
+        "name": "z/OS 2.4 zD&T",
+        "host": "mw03.lab.mattwilson.org",
+        "port": 23
+    }
+]
