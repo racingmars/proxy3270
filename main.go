@@ -1,3 +1,22 @@
+/*
+ * Copyright 2020 by Matthew R. Wilson <mwilson@mattwilson.org>
+ *
+ * This file is part of proxy3270.
+ *
+ * proxy3270 is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * proxy3270 is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with proxy3270. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package main
 
 import (
@@ -20,6 +39,7 @@ var rules go3270.Rules
 
 func main() {
 	var err error
+
 	debug := flag.Bool("debug", false, "sets log level to debug")
 	port := flag.Int("port", 3270, "port number to listen on")
 	configFile := flag.String("config", "config.json", "configuration file path")
@@ -75,8 +95,7 @@ func main() {
 func handle(conn net.Conn) {
 	defer conn.Close()
 	if err := go3270.NegotiateTelnet(conn); err != nil {
-		fmt.Fprintf(os.Stderr,
-			"err: couldn't negotiate connection from %s\n", conn.RemoteAddr())
+		log.Error().Err(err).Msgf("couldn't negotiate connection from %s", conn.RemoteAddr())
 		return
 	}
 
@@ -84,9 +103,7 @@ func handle(conn net.Conn) {
 		[]go3270.AID{go3270.AIDEnter}, []go3270.AID{go3270.AIDPF3},
 		"errormsg", 2, 33, conn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr,
-			"err: couldn't handle screen for %s:\n  %v\n",
-			conn.RemoteAddr(), err)
+		log.Error().Err(err).Msgf("err: couldn't handle screen for %s", conn.RemoteAddr())
 		return
 	}
 	if response.AID == go3270.AIDPF3 {
