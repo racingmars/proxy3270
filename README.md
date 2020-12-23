@@ -1,7 +1,7 @@
-Proxy3270, a 3270 forwarding application in Go
-==============================================
+Proxy3270, a 3270 forwarding service
+====================================
 
-Proxy3270 allows a user to open a 3270 session to the server and choose from a list of other 3270 servers to connect to. This allows you to have several services in your network and provide one point of access--the Proxy3270 service.
+[Proxy3270](https://github.com/racingmars/proxy3270) allows a user to open a 3270 session to the server and choose from a list of other 3270 servers to connect to. This allows you to have several services in your network and provide one point of access--the Proxy3270 service.
 
 **This should be considered a proof-of-concept prototype at this stage.** I have some plans for the future, but at the moment the service is very simple: it is statically configured from a JSON configuration file, and it will allow the user to choose a service to connect to, then disconnect when/if the remote server session is done.
 
