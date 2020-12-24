@@ -1,8 +1,6 @@
-# github.com/racingmars/go3270 v0.0.0-20201207100048-7a7e8165dd63
-## explicit
+# github.com/racingmars/go3270 v0.0.0-20201224033952-6c0f8b25fe13
 github.com/racingmars/go3270
 # github.com/rs/zerolog v1.20.0
-## explicit
 github.com/rs/zerolog
 github.com/rs/zerolog/internal/cbor
 github.com/rs/zerolog/internal/json

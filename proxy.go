@@ -20,10 +20,8 @@
 package main
 
 import (
-	"errors"
 	"io"
 	"net"
-	"os"
 	"sync"
 	"time"
 
@@ -77,7 +75,7 @@ func readAndFeed(name string, in, out net.Conn, wg *sync.WaitGroup, end, done ch
 		default:
 			in.SetReadDeadline(time.Now().Add(time.Second / 2))
 			n, err := in.Read(buffer)
-			if errors.Is(err, os.ErrDeadlineExceeded) {
+			if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 				continue
 			} else if err == io.EOF {
 				log.Debug().Msg("connection closed")
