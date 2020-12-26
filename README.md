@@ -12,7 +12,10 @@ Build the project with the usual `go build`, resulting in the proxy3270 binary. 
 
  - `-port <port>` set the port number to listen on.
  - `-debug` enable debug logging level.
+ - `-debug3270` enable debug output in the go3270 library.
+ - `-trace` enable trace logging level (logs all data received from clients and servers during forwarding).
  - `-config <file>` use a config file other than config.json.
+ - `-telnetTimeout <seconds>` set the time to wait for 3270 client response during "un-negotiation" before forwarding to remote host. The default of 1 second should be fine in most cases, but if using IBM PCOMM, I need to set this to 5 seconds.
 
 Limitations
 -----------

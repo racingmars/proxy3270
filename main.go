@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -45,6 +46,7 @@ func main() {
 	trace := flag.Bool("trace", false, "sets log level to trace")
 	port := flag.Int("port", 3270, "port number to listen on")
 	configFile := flag.String("config", "config.json", "configuration file path")
+	telnetTimeout := flag.Int("telnetTimeout", 1, "length of time to wait for telnet command response from clients when un-negotiating the 3270 session")
 	flag.Parse()
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "02 15:04:05"})
@@ -57,6 +59,11 @@ func main() {
 
 	if *debug3270 {
 		go3270.Debug = os.Stderr
+	}
+
+	if *telnetTimeout < 1 {
+		log.Error().Err(err).Msg("telnetTimeout must be positive")
+		return
 	}
 
 	config, err = loadConfig(*configFile)
@@ -89,7 +96,7 @@ func main() {
 				log.Error().Err(err).Msg("Couldn't accept connection")
 			}
 			log.Info().Msgf("New connection from %s", conn.RemoteAddr())
-			go handle(conn)
+			go handle(conn, *telnetTimeout)
 		}
 	}()
 
@@ -100,7 +107,7 @@ func main() {
 	return
 }
 
-func handle(conn net.Conn) {
+func handle(conn net.Conn, timeout int) {
 	defer conn.Close()
 	if err := go3270.NegotiateTelnet(conn); err != nil {
 		log.Error().Err(err).Msgf("couldn't negotiate connection from %s", conn.RemoteAddr())
@@ -120,6 +127,12 @@ func handle(conn net.Conn) {
 	selection, _ := strconv.Atoi(response.Values["input"])
 	selection = selection - 1
 	remote := fmt.Sprintf("%s:%d", config[selection].Host, config[selection].Port)
+
+	if err = go3270.UnNegotiateTelnet(conn, time.Second*time.Duration(timeout)); err != nil {
+		log.Error().Err(err).Msgf("Couldn't unnegotiate client")
+		return
+	}
+
 	if err = proxy(conn, remote); err != nil {
 		log.Error().Err(err).Msgf("Error proxying to %s", remote)
 		return
