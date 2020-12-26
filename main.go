@@ -41,14 +41,22 @@ func main() {
 	var err error
 
 	debug := flag.Bool("debug", false, "sets log level to debug")
+	debug3270 := flag.Bool("debug3270", false, "enables debugging in the go3270 library")
+	trace := flag.Bool("trace", false, "sets log level to trace")
 	port := flag.Int("port", 3270, "port number to listen on")
 	configFile := flag.String("config", "config.json", "configuration file path")
 	flag.Parse()
 
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "02 15:04:05"})
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	if *debug {
+	if *trace {
+		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	} else if *debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	if *debug3270 {
+		go3270.Debug = os.Stderr
 	}
 
 	config, err = loadConfig(*configFile)

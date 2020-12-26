@@ -65,6 +65,7 @@ func readAndFeed(name string, in, out net.Conn, wg *sync.WaitGroup, end, done ch
 		log.Debug().Msgf("ending readAndFeed(): %s", name)
 		wg.Done()
 	}()
+	log.Debug().Msgf("starting readAndFeed(): %s", name)
 	buffer := make([]byte, 1024)
 	finish := false
 	for !finish {
@@ -78,14 +79,15 @@ func readAndFeed(name string, in, out net.Conn, wg *sync.WaitGroup, end, done ch
 			if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 				continue
 			} else if err == io.EOF {
-				log.Debug().Msg("connection closed")
+				log.Debug().Msgf("connection closed: %s", name)
 				return
 			} else if err != nil {
-				log.Error().Err(err).Msg("read error")
+				log.Error().Err(err).Msgf("read error: %s", name)
 				return
 			}
+			log.Trace().Hex("data", buffer[:n]).Msgf("%s read", name)
 			if _, err := out.Write(buffer[:n]); err != nil {
-				log.Error().Err(err).Msg("write error")
+				log.Error().Err(err).Msgf("write error: %s", name)
 				return
 			}
 		}
