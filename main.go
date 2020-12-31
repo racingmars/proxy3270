@@ -47,14 +47,29 @@ func main() {
 	port := flag.Int("port", 3270, "port number to listen on")
 	configFile := flag.String("config", "config.json", "configuration file path")
 	telnetTimeout := flag.Int("telnetTimeout", 1, "length of time to wait for telnet command response from clients when un-negotiating the 3270 session")
+	logFile := flag.String("log", "", "log file name to enable logging to a file")
 	flag.Parse()
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "02 15:04:05"})
+	consoleWriter := zerolog.ConsoleWriter{Out: os.Stdout /*, TimeFormat: "02 15:04:05"*/}
+	log.Logger = log.Output(consoleWriter)
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if *trace {
 		zerolog.SetGlobalLevel(zerolog.TraceLevel)
 	} else if *debug {
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
+	if *logFile != "" {
+		f, err := os.OpenFile(*logFile,
+			os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0660)
+		if err != nil {
+			log.Error().Err(err).Msg("Couldn't open connection log file")
+			return
+		}
+		defer f.Close()
+		multi := zerolog.MultiLevelWriter(consoleWriter, f)
+		log.Logger = zerolog.New(multi).With().Timestamp().Logger()
+		log.Info().Msgf("Logging to file %s", *logFile)
 	}
 
 	if *debug3270 {
@@ -133,10 +148,11 @@ func handle(conn net.Conn, timeout int) {
 		return
 	}
 
+	log.Info().Msgf("Connecting client %s to server %s", conn.RemoteAddr(), remote)
 	if err = proxy(conn, remote); err != nil {
 		log.Error().Err(err).Msgf("Error proxying to %s", remote)
-		return
 	}
+	log.Info().Msgf("Client %s session ended", conn.RemoteAddr())
 }
 
 func buildScreen(config []ServerConfig) (go3270.Screen, go3270.Rules) {
