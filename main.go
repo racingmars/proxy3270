@@ -63,7 +63,7 @@ func main() {
 		f, err := os.OpenFile(*logFile,
 			os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0660)
 		if err != nil {
-			log.Error().Err(err).Msg("Couldn't open connection log file")
+			log.Error().Err(err).Msg("Couldn't open log file")
 			return
 		}
 		defer f.Close()
