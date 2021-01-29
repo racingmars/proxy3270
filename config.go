@@ -23,11 +23,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 )
 
 const MaxServers = 26
 const MaxNameLength = 30
+const MaxAppTitleLength = 79
+
+const defaultTitle = "3270 Proxy Application"
+
+type Config struct {
+	Title   string         `json:"title"`
+	Servers []ServerConfig `json:"servers"`
+}
 
 type ServerConfig struct {
 	Name string `json:"name"`
@@ -35,51 +44,74 @@ type ServerConfig struct {
 	Port uint   `json:"port"`
 }
 
-func loadConfig(path string) ([]ServerConfig, error) {
+func loadConfig(path string) (*Config, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 
 	decoder := json.NewDecoder(f)
-	var config []ServerConfig
+	var config Config
 	err = decoder.Decode(&config)
 	if err != nil {
 		return nil, err
 	}
 
-	return config, nil
-}
-
-func validateConfig(config []ServerConfig) error {
-	if len(config) > MaxServers {
-		return fmt.Errorf("Too many server configurations (%d): max %d",
-			len(config), MaxServers)
+	// Ensure a title is set
+	config.Title = strings.TrimSpace(config.Title)
+	if config.Title == "" {
+		config.Title = defaultTitle
 	}
 
-	for i := range config {
-		if len(strings.TrimSpace(config[i].Name)) == 0 {
+	return &config, nil
+}
+
+func validateConfig(config *Config) error {
+	// Check that the title isn't too long
+	if len(config.Title) > MaxAppTitleLength {
+		return fmt.Errorf("Application title is too long: max %d characters",
+			MaxAppTitleLength)
+	}
+
+	if !validateEbcdicString(config.Title) {
+		return fmt.Errorf("Application title contains illegal character")
+	}
+
+	if len(config.Servers) > MaxServers {
+		return fmt.Errorf("Too many server configurations (%d): max %d",
+			len(config.Servers), MaxServers)
+	}
+	for i := range config.Servers {
+		if len(strings.TrimSpace(config.Servers[i].Name)) == 0 {
 			return fmt.Errorf("Server index %d has a blank name", i)
 		}
 
-		if len(config[i].Name) > MaxNameLength {
+		if len(config.Servers[i].Name) > MaxNameLength {
 			return fmt.Errorf("Server `%s` name too long: max %d characters",
-				config[i].Name, MaxNameLength)
+				config.Servers[i].Name, MaxNameLength)
 		}
 
-		if len(strings.TrimSpace(config[i].Host)) == 0 {
-			return fmt.Errorf("Host missing on server `%s`", config[i].Name)
+		if len(strings.TrimSpace(config.Servers[i].Host)) == 0 {
+			return fmt.Errorf("Host missing on server `%s`", config.Servers[i].Name)
 		}
 
-		if config[i].Port == 0 {
-			return fmt.Errorf("Port missing on server `%s`", config[i].Name)
+		if config.Servers[i].Port == 0 {
+			return fmt.Errorf("Port missing on server `%s`", config.Servers[i].Name)
 		}
 
-		if config[i].Port > 65535 {
+		if config.Servers[i].Port > 65535 {
 			return fmt.Errorf("Port %d invalid on server `%s`",
-				config[i].Port, config[i].Name)
+				config.Servers[i].Port, config.Servers[i].Name)
 		}
 	}
 
 	return nil
+}
+
+// validateEbcdicString will return true if the input string contains only
+// allowed characters, false otherwise.
+var validEdcdicStringRegexp = regexp.MustCompile("^[a-zA-Z0-9 ,.;:!|\\\\/<>@#$%^&*(){}\\-_+=~`\"']*$")
+
+func validateEbcdicString(input string) bool {
+	return validEdcdicStringRegexp.MatchString(input)
 }

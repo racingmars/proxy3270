@@ -34,7 +34,7 @@ import (
 	"github.com/racingmars/go3270"
 )
 
-var config []ServerConfig
+var config *Config
 var screen go3270.Screen
 var rules go3270.Rules
 
@@ -141,7 +141,8 @@ func handle(conn net.Conn, timeout int) {
 	}
 	selection, _ := strconv.Atoi(response.Values["input"])
 	selection = selection - 1
-	remote := fmt.Sprintf("%s:%d", config[selection].Host, config[selection].Port)
+	remote := fmt.Sprintf("%s:%d", config.Servers[selection].Host,
+		config.Servers[selection].Port)
 
 	if err = go3270.UnNegotiateTelnet(conn, time.Second*time.Duration(timeout)); err != nil {
 		log.Error().Err(err).Msgf("Couldn't unnegotiate client")
@@ -155,18 +156,19 @@ func handle(conn net.Conn, timeout int) {
 	log.Info().Msgf("Client %s session ended", conn.RemoteAddr())
 }
 
-func buildScreen(config []ServerConfig) (go3270.Screen, go3270.Rules) {
+func buildScreen(config *Config) (go3270.Screen, go3270.Rules) {
 	screen := make(go3270.Screen, 0)
 	rules := make(go3270.Rules)
 
-	screen = append(screen, go3270.Field{Row: 0, Col: 27, Intense: true, Content: "3270 Proxy Application"})
+	titleStart := 39 - (len(config.Title) / 2)
+	screen = append(screen, go3270.Field{Row: 0, Col: titleStart, Intense: true, Content: config.Title})
 	screen = append(screen, go3270.Field{Row: 2, Col: 2, Content: "Select service to connect to:"})
 	screen = append(screen, go3270.Field{Row: 2, Col: 32, Name: "input", Highlighting: go3270.Underscore, Write: true})
 	screen = append(screen, go3270.Field{Row: 2, Col: 35}) // Field "stop" character
 	screen = append(screen, go3270.Field{Row: 20, Col: 0, Intense: true, Color: go3270.Red, Name: "errormsg"})
 	screen = append(screen, go3270.Field{Row: 22, Col: 0, Content: "PF3 Exit"})
 
-	for i := range config {
+	for i := range config.Servers {
 		var rowBase = 4
 		var colBase = 2
 
@@ -177,13 +179,13 @@ func buildScreen(config []ServerConfig) (go3270.Screen, go3270.Rules) {
 		}
 
 		screen = append(screen, go3270.Field{Row: rowBase + i, Col: colBase, Content: fmt.Sprintf("%2d", i+1), Intense: true})
-		screen = append(screen, go3270.Field{Row: rowBase + i, Col: colBase + 3, Content: config[i].Name})
+		screen = append(screen, go3270.Field{Row: rowBase + i, Col: colBase + 3, Content: config.Servers[i].Name})
 	}
 
 	v := func(input string) bool {
 		if val, err := strconv.Atoi(input); err != nil {
 			return false
-		} else if val < 1 || val > len(config) {
+		} else if val < 1 || val > len(config.Servers) {
 			return false
 		}
 		return true
