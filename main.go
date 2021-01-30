@@ -177,8 +177,8 @@ func buildScreen(config *Config) (go3270.Screen, go3270.Rules) {
 		var colBase = 2
 
 		// Wrap to the second column
-		if i > 12 {
-			rowBase = -9
+		if i > 11 {
+			rowBase = -8
 			colBase = 41
 		}
 
