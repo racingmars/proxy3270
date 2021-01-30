@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 by Matthew R. Wilson <mwilson@mattwilson.org>
+ * Copyright 2020-2021 by Matthew R. Wilson <mwilson@mattwilson.org>
  *
  * This file is part of proxy3270.
  *
@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -160,12 +161,15 @@ func buildScreen(config *Config) (go3270.Screen, go3270.Rules) {
 	screen := make(go3270.Screen, 0)
 	rules := make(go3270.Rules)
 
+	discline1, discline2 := wrapDisclaimer(config.Disclaimer, 79)
 	titleStart := 39 - (len(config.Title) / 2)
 	screen = append(screen, go3270.Field{Row: 0, Col: titleStart, Intense: true, Content: config.Title})
 	screen = append(screen, go3270.Field{Row: 2, Col: 2, Content: "Select service to connect to:"})
 	screen = append(screen, go3270.Field{Row: 2, Col: 32, Name: "input", Highlighting: go3270.Underscore, Write: true})
 	screen = append(screen, go3270.Field{Row: 2, Col: 35}) // Field "stop" character
-	screen = append(screen, go3270.Field{Row: 20, Col: 0, Intense: true, Color: go3270.Red, Name: "errormsg"})
+	screen = append(screen, go3270.Field{Row: 17, Col: 0, Intense: true, Color: go3270.Red, Name: "errormsg"})
+	screen = append(screen, go3270.Field{Row: 19, Col: 0, Color: go3270.Red, Content: discline1})
+	screen = append(screen, go3270.Field{Row: 20, Col: 0, Color: go3270.Red, Content: discline2})
 	screen = append(screen, go3270.Field{Row: 22, Col: 0, Content: "PF3 Exit"})
 
 	for i := range config.Servers {
@@ -193,4 +197,34 @@ func buildScreen(config *Config) (go3270.Screen, go3270.Rules) {
 	rules["input"] = go3270.FieldRules{Validator: v}
 
 	return screen, rules
+}
+
+// wrapDisclaimer will split the input string into line1 with no more than
+// linelength characters, and the remaining text in line2.
+// CAVEATS: line2 may extend longer than the linelength. This function is
+// currently only intended for use with displaying the disclaimer text in the
+// buildScreen() function. If additional word wrap uses cases arise, this
+// function can be modified to return a slice of strings with unlimited
+// wrapped lines.
+func wrapDisclaimer(disclaimer string, linelength int) (line1, line2 string) {
+	disclaimer = strings.TrimSpace(disclaimer)
+
+	// String already fits entirely on first line
+	if len(disclaimer) <= linelength {
+		return disclaimer, ""
+	}
+
+	// Look for word boundary to wrap on
+	for i := linelength - 1; i >= 0; i-- {
+		if disclaimer[i] == ' ' {
+			line1 = disclaimer[0:i]
+			line2 = disclaimer[i+1:]
+			return line1, line2
+		}
+	}
+
+	// Handle case where no word boundary was found
+	line1 = disclaimer[0:linelength]
+	line2 = disclaimer[linelength:]
+	return line1, line2
 }

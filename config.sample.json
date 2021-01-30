@@ -1,5 +1,6 @@
 {
     "title": "3270 Proxy Application",
+    "disclaimer": "WARNING: All activity on this system is logged and monitored. Authorized use only.",
     "servers": [
         {
             "name": "My MVS 3.8 System",

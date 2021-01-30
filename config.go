@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 by Matthew R. Wilson <mwilson@mattwilson.org>
+ * Copyright 2020-2021 by Matthew R. Wilson <mwilson@mattwilson.org>
  *
  * This file is part of proxy3270.
  *
@@ -30,12 +30,14 @@ import (
 const MaxServers = 26
 const MaxNameLength = 30
 const MaxAppTitleLength = 79
+const MaxDisclaimerLineLength = 79
 
 const defaultTitle = "3270 Proxy Application"
 
 type Config struct {
-	Title   string         `json:"title"`
-	Servers []ServerConfig `json:"servers"`
+	Title      string         `json:"title"`
+	Disclaimer string         `json:"disclaimer"`
+	Servers    []ServerConfig `json:"servers"`
 }
 
 type ServerConfig struct {
@@ -63,11 +65,13 @@ func loadConfig(path string) (*Config, error) {
 		config.Title = defaultTitle
 	}
 
+	// Trim the disclaimer, but blank is permitted
+	config.Disclaimer = strings.TrimSpace(config.Disclaimer)
+
 	return &config, nil
 }
 
 func validateConfig(config *Config) error {
-	// Check that the title isn't too long
 	if len(config.Title) > MaxAppTitleLength {
 		return fmt.Errorf("Application title is too long: max %d characters",
 			MaxAppTitleLength)
@@ -75,6 +79,14 @@ func validateConfig(config *Config) error {
 
 	if !validateEbcdicString(config.Title) {
 		return fmt.Errorf("Application title contains illegal character")
+	}
+
+	if !validateEbcdicString(config.Disclaimer) {
+		return fmt.Errorf("Disclaimer text contains illegal character")
+	}
+	if _, line2 := wrapDisclaimer(
+		config.Disclaimer, MaxDisclaimerLineLength); len(line2) > MaxDisclaimerLineLength {
+		return fmt.Errorf("The word-wrapped disclaimer text exceeds two lines")
 	}
 
 	if len(config.Servers) > MaxServers {
