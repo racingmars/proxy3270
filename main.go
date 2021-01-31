@@ -35,9 +35,15 @@ import (
 	"github.com/racingmars/go3270"
 )
 
+type userSession struct {
+	page       int
+	totalPages int
+}
+
+const errFieldName = "errmessage"
+const pageSize = 12
+
 var config *Config
-var screen go3270.Screen
-var rules go3270.Rules
 
 func main() {
 	var err error
@@ -94,8 +100,6 @@ func main() {
 		return
 	}
 
-	screen, rules = buildScreen(config)
-
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(*port))
 	if err != nil {
 		log.Error().Err(err).Msg("Couldn't start listener")
@@ -130,34 +134,74 @@ func handle(conn net.Conn, timeout int) {
 		return
 	}
 
-	response, err := go3270.HandleScreen(screen, rules, nil,
-		[]go3270.AID{go3270.AIDEnter}, []go3270.AID{go3270.AIDPF3},
-		"errormsg", 2, 33, conn)
-	if err != nil {
-		log.Error().Err(err).Msgf("err: couldn't handle screen for %s", conn.RemoteAddr())
-		return
+	session := &userSession{}
+	session.totalPages = len(config.Servers) / pageSize
+	if session.totalPages*pageSize < len(config.Servers) {
+		session.totalPages++
 	}
-	if response.AID == go3270.AIDPF3 {
-		return
+
+	var response go3270.Response
+	var errmsg string
+	for {
+		screen, rules := buildScreen(config, session, "")
+		var err error
+		response, err = go3270.HandleScreen(screen, rules,
+			map[string]string{errFieldName: errmsg},
+			[]go3270.AID{go3270.AIDEnter}, []go3270.AID{go3270.AIDPF3,
+				go3270.AIDPF7, go3270.AIDPF8},
+			errFieldName, 2, 33, conn)
+		if err != nil {
+			log.Error().Err(err).Msgf("err: couldn't handle screen for %s", conn.RemoteAddr())
+			return
+		}
+		errmsg = ""
+		switch response.AID {
+		case go3270.AIDPF3:
+			return
+		case go3270.AIDPF7:
+			// page up
+			if session.page <= 0 {
+				errmsg = "Already on the first page"
+				continue
+			}
+			session.page--
+			continue
+		case go3270.AIDPF8:
+			// page down
+			if session.page >= session.totalPages-1 {
+				errmsg = "Already on the last page"
+				continue
+			}
+			session.page++
+			continue
+		case go3270.AIDEnter:
+			break
+		default:
+			log.Error().Msgf("Somehow we got an unexpected key from HandleScreen()")
+			continue
+		}
+
+		// otherwise... continue with rest of function
+		break
 	}
 	selection, _ := strconv.Atoi(response.Values["input"])
 	selection = selection - 1
 	remote := fmt.Sprintf("%s:%d", config.Servers[selection].Host,
 		config.Servers[selection].Port)
 
-	if err = go3270.UnNegotiateTelnet(conn, time.Second*time.Duration(timeout)); err != nil {
+	if err := go3270.UnNegotiateTelnet(conn, time.Second*time.Duration(timeout)); err != nil {
 		log.Error().Err(err).Msgf("Couldn't unnegotiate client")
 		return
 	}
 
 	log.Info().Msgf("Connecting client %s to server %s", conn.RemoteAddr(), remote)
-	if err = proxy(conn, remote); err != nil {
+	if err := proxy(conn, remote); err != nil {
 		log.Error().Err(err).Msgf("Error proxying to %s", remote)
 	}
 	log.Info().Msgf("Client %s session ended", conn.RemoteAddr())
 }
 
-func buildScreen(config *Config) (go3270.Screen, go3270.Rules) {
+func buildScreen(config *Config, session *userSession, errmsg string) (go3270.Screen, go3270.Rules) {
 	screen := make(go3270.Screen, 0)
 	rules := make(go3270.Rules)
 
@@ -166,24 +210,28 @@ func buildScreen(config *Config) (go3270.Screen, go3270.Rules) {
 	screen = append(screen, go3270.Field{Row: 0, Col: titleStart, Intense: true, Content: config.Title})
 	screen = append(screen, go3270.Field{Row: 2, Col: 2, Content: "Select service to connect to:"})
 	screen = append(screen, go3270.Field{Row: 2, Col: 32, Name: "input", Highlighting: go3270.Underscore, Write: true})
-	screen = append(screen, go3270.Field{Row: 2, Col: 35}) // Field "stop" character
-	screen = append(screen, go3270.Field{Row: 17, Col: 0, Intense: true, Color: go3270.Red, Name: "errormsg"})
+	screen = append(screen, go3270.Field{Row: 2, Col: 36}) // Field "stop" character
+	screen = append(screen, go3270.Field{Row: 17, Col: 0, Intense: true, Color: go3270.Red, Name: errFieldName})
 	screen = append(screen, go3270.Field{Row: 19, Col: 0, Color: go3270.Red, Content: discline1})
 	screen = append(screen, go3270.Field{Row: 20, Col: 0, Color: go3270.Red, Content: discline2})
 	screen = append(screen, go3270.Field{Row: 22, Col: 0, Content: "PF3 Exit"})
 
-	for i := range config.Servers {
-		var rowBase = 4
-		var colBase = 2
+	if session.page > 0 {
+		screen = append(screen, go3270.Field{Row: 22, Col: 13, Content: "PF7 PgUp"})
+	}
+	if session.page < session.totalPages-1 {
+		screen = append(screen, go3270.Field{Row: 22, Col: 25, Content: "PF8 PgDn"})
+	}
 
-		// Wrap to the second column
+	for i := range config.Servers[session.page*pageSize:] {
 		if i > 11 {
-			rowBase = -8
-			colBase = 41
+			break
 		}
 
-		screen = append(screen, go3270.Field{Row: rowBase + i, Col: colBase, Content: fmt.Sprintf("%2d", i+1), Intense: true})
-		screen = append(screen, go3270.Field{Row: rowBase + i, Col: colBase + 3, Content: config.Servers[i].Name})
+		const rowBase = 4
+
+		screen = append(screen, go3270.Field{Row: rowBase + i, Col: 2, Content: fmt.Sprintf("%3d", session.page*pageSize+i+1), Intense: true})
+		screen = append(screen, go3270.Field{Row: rowBase + i, Col: 6, Content: config.Servers[session.page*pageSize+i].Name})
 	}
 
 	v := func(input string) bool {

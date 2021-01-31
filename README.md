@@ -22,8 +22,8 @@ Limitations
 
 (Some of these will change in the future)
 
- - You may have up to 26 hosts in your configuration file.
- - Server names are limited to 30 characters.
+ - You may have up to 999 hosts in your configuration file.
+ - Server names are limited to 65 characters.
  - Connecting to TLS services is not supported.
  - To change the configuration, you must restart the server (which will drop all active connections).
 

@@ -27,8 +27,8 @@ import (
 	"strings"
 )
 
-const MaxServers = 24
-const MaxNameLength = 30
+const MaxServers = 999
+const MaxNameLength = 65
 const MaxAppTitleLength = 79
 const MaxDisclaimerLineLength = 79
 
