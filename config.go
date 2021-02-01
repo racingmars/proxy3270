@@ -51,6 +51,7 @@ func loadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 
 	decoder := json.NewDecoder(f)
 	var config Config
