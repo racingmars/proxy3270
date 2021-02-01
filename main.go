@@ -20,6 +20,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net"
@@ -52,6 +53,10 @@ func main() {
 	debug3270 := flag.Bool("debug3270", false, "enables debugging in the go3270 library")
 	trace := flag.Bool("trace", false, "sets log level to trace")
 	port := flag.Int("port", 3270, "port number to listen on")
+	tlsport := flag.Int("tlsport", 4270, "port number to listen for TLS connection")
+	pubkey := flag.String("pubkey", "pubkey.pem", "public certificate and bundle (PEM)")
+	privkey := flag.String("privkey", "privkey.pem", "private key (PEM)")
+	tlsenable := flag.Bool("tlsenable", false, "Enable TLS listener?")
 	configFile := flag.String("config", "config.json", "configuration file path")
 	telnetTimeout := flag.Int("telnetTimeout", 1, "length of time to wait for telnet command response from clients when un-negotiating the 3270 session")
 	logFile := flag.String("log", "", "log file name to enable logging to a file")
@@ -100,12 +105,31 @@ func main() {
 		return
 	}
 
+	var tlsln net.Listener
+	if *tlsenable {
+		cert, err := tls.LoadX509KeyPair(*pubkey, *privkey)
+		if err != nil {
+			log.Error().Err(err).Msg("Couldn't load X.509 certificate")
+			return
+		}
+
+		certConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+		tlsln, err = tls.Listen("tcp", ":"+strconv.Itoa(*tlsport), certConfig)
+		if err != nil {
+			log.Error().Err(err).Msg("Couldn't start TLS listener")
+			return
+		}
+	}
+
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(*port))
 	if err != nil {
-		log.Error().Err(err).Msg("Couldn't start listener")
+		log.Error().Err(err).Msg("Couldn't start unencrypted listener")
 		return
 	}
 	log.Info().Msgf("LISTENING ON PORT %d FOR CONNECTIONS", *port)
+	if *tlsenable {
+		log.Info().Msgf("LISTENING ON PORT %d FOR TLS CONNECTIONS", *tlsport)
+	}
 	log.Info().Msg("Press Ctrl-C to end server.")
 
 	// Run the accept loop in a goroutine so we can wait on the quit signal
@@ -119,6 +143,20 @@ func main() {
 			go handle(conn, *telnetTimeout)
 		}
 	}()
+
+	// Run the accept loop in a goroutine so we can wait on the quit signal
+	if *tlsenable {
+		go func() {
+			for {
+				conn, err := tlsln.Accept()
+				if err != nil {
+					log.Error().Err(err).Msg("Couldn't accept TLS connection")
+				}
+				log.Info().Msgf("New TLS connection from %s", conn.RemoteAddr())
+				go handle(conn, *telnetTimeout)
+			}
+		}()
+	}
 
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
