@@ -10,7 +10,9 @@
         {
             "name": "z/OS 2.4 zD&T",
             "host": "mw03.lab.mattwilson.org",
-            "port": 23
+            "port": 2023,
+            "secure": true,
+            "ignoreCertValidation": false
         }
     ]
 }

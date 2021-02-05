@@ -41,9 +41,11 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Name string `json:"name"`
-	Host string `json:"host"`
-	Port uint   `json:"port"`
+	Name                 string `json:"name"`
+	Host                 string `json:"host"`
+	Port                 uint   `json:"port"`
+	UseTLS               bool   `json:"secure"`
+	IgnoreCertValidation bool   `json:"ignoreCertValidation"`
 }
 
 func loadConfig(path string) (*Config, error) {

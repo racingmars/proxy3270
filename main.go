@@ -233,7 +233,9 @@ func handle(conn net.Conn, timeout int) {
 	}
 
 	log.Info().Msgf("Connecting client %s to server %s", conn.RemoteAddr(), remote)
-	if err := proxy(conn, remote); err != nil {
+	if err := proxy(conn, config.Servers[selection].Host,
+		config.Servers[selection].Port, config.Servers[selection].UseTLS,
+		config.Servers[selection].IgnoreCertValidation); err != nil {
 		log.Error().Err(err).Msgf("Error proxying to %s", remote)
 	}
 	log.Info().Msgf("Client %s session ended", conn.RemoteAddr())

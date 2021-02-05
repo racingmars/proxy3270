@@ -20,6 +20,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -28,12 +30,21 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-func proxy(client net.Conn, target string) error {
-	server, err := net.DialTimeout("tcp", target, 15*time.Second)
+func proxy(client net.Conn, targetHost string, targetPort uint, useTLS, ignoreCertErrors bool) error {
+	server, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", targetHost,
+		targetPort), 15*time.Second)
 	if err != nil {
 		return err
 	}
 	defer server.Close()
+
+	if useTLS {
+		tlsConfig := &tls.Config{
+			ServerName:         targetHost,
+			InsecureSkipVerify: ignoreCertErrors,
+		}
+		server = tls.Client(server, tlsConfig)
+	}
 
 	clientdone := make(chan bool)
 	clientend := make(chan bool)
