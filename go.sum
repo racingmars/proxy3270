@@ -2,6 +2,8 @@ github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e/go.mod h1:F5haX7
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/racingmars/go3270 v0.0.0-20201231034102-c72f89f1d724 h1:OL19WmL56GGO2hD+iy5pRNRg7RvNcdb1FVAKMVq5dT0=
 github.com/racingmars/go3270 v0.0.0-20201231034102-c72f89f1d724/go.mod h1:TVzW7wx9lk51ziz/RKKkOj1Kc3NrPJkqMWJFiH5p3pI=
+github.com/racingmars/go3270 v0.0.0-20210205013606-b6d2a0953286 h1:abaR3HT2vwZVGAPTMMMweZNH/bpb0xjg32wXPfTSbps=
+github.com/racingmars/go3270 v0.0.0-20210205013606-b6d2a0953286/go.mod h1:TVzW7wx9lk51ziz/RKKkOj1Kc3NrPJkqMWJFiH5p3pI=
 github.com/rs/xid v1.2.1/go.mod h1:+uKXf+4Djp6Md1KODXJxgGQPKngRmWyn10oCKFzNHOQ=
 github.com/rs/zerolog v1.20.0 h1:38k9hgtUBdxFwE34yS8rTHmHBa4eN16E4DJlv177LNs=
 github.com/rs/zerolog v1.20.0/go.mod h1:IzD0RJ65iWH0w97OQQebJEvTZYvsCUm9WVLWBQrJRjo=
