@@ -23,15 +23,13 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	"github.com/racingmars/go3270"
 )
@@ -45,6 +43,12 @@ const errFieldName = "errmessage"
 const pageSize = 12
 
 var config *Config
+
+var l *Logger
+
+func init() {
+	l = InitLogger(InfoLvl, os.Stdout)
+}
 
 func main() {
 	var err error
@@ -62,26 +66,23 @@ func main() {
 	logFile := flag.String("log", "", "log file name to enable logging to a file")
 	flag.Parse()
 
-	consoleWriter := zerolog.ConsoleWriter{Out: os.Stdout /*, TimeFormat: "02 15:04:05"*/}
-	log.Logger = log.Output(consoleWriter)
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	if *trace {
-		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+		l.Level = TraceLvl
 	} else if *debug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		l.Level = DebugLvl
 	}
 
 	if *logFile != "" {
 		f, err := os.OpenFile(*logFile,
 			os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0660)
 		if err != nil {
-			log.Error().Err(err).Msg("Couldn't open log file")
+			l.LogWithErr(ErrorLvl, err, "Couldn't open log file")
 			return
 		}
 		defer f.Close()
-		multi := zerolog.MultiLevelWriter(consoleWriter, f)
-		log.Logger = zerolog.New(multi).With().Timestamp().Logger()
-		log.Info().Msgf("Logging to file %s", *logFile)
+		multiwriter := io.MultiWriter(os.Stdout, f)
+		l = InitLogger(l.Level, multiwriter)
+		l.Log(InfoLvl, "Logging to file %s", *logFile)
 	}
 
 	if *debug3270 {
@@ -89,19 +90,19 @@ func main() {
 	}
 
 	if *telnetTimeout < 1 {
-		log.Error().Err(err).Msg("telnetTimeout must be positive")
+		l.LogWithErr(ErrorLvl, err, "telnetTimeout must be positive")
 		return
 	}
 
 	config, err = loadConfig(*configFile)
 	if err != nil {
-		log.Error().Err(err).Msg("Couldn't load config file")
+		l.LogWithErr(ErrorLvl, err, "Couldn't load config file")
 		return
 	}
 
 	err = validateConfig(config)
 	if err != nil {
-		log.Error().Err(err).Msg("Config error")
+		l.LogWithErr(ErrorLvl, err, "Config error")
 		return
 	}
 
@@ -109,37 +110,37 @@ func main() {
 	if *tlsenable {
 		cert, err := tls.LoadX509KeyPair(*pubkey, *privkey)
 		if err != nil {
-			log.Error().Err(err).Msg("Couldn't load X.509 certificate")
+			l.LogWithErr(ErrorLvl, err, "Couldn't load X.509 certificate")
 			return
 		}
 
 		certConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
 		tlsln, err = tls.Listen("tcp", ":"+strconv.Itoa(*tlsport), certConfig)
 		if err != nil {
-			log.Error().Err(err).Msg("Couldn't start TLS listener")
+			l.LogWithErr(ErrorLvl, err, "Couldn't start TLS listener")
 			return
 		}
 	}
 
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(*port))
 	if err != nil {
-		log.Error().Err(err).Msg("Couldn't start unencrypted listener")
+		l.LogWithErr(ErrorLvl, err, "Couldn't start unencrypted listener")
 		return
 	}
-	log.Info().Msgf("LISTENING ON PORT %d FOR CONNECTIONS", *port)
+	l.Log(InfoLvl, "LISTENING ON PORT %d FOR CONNECTIONS", *port)
 	if *tlsenable {
-		log.Info().Msgf("LISTENING ON PORT %d FOR TLS CONNECTIONS", *tlsport)
+		l.Log(InfoLvl, "LISTENING ON PORT %d FOR TLS CONNECTIONS", *tlsport)
 	}
-	log.Info().Msg("Press Ctrl-C to end server.")
+	l.Log(InfoLvl, "Press Ctrl-C to end server.")
 
 	// Run the accept loop in a goroutine so we can wait on the quit signal
 	go func() {
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
-				log.Error().Err(err).Msg("Couldn't accept connection")
+				l.LogWithErr(ErrorLvl, err, "Couldn't accept connection")
 			}
-			log.Info().Msgf("New connection from %s", conn.RemoteAddr())
+			l.Log(InfoLvl, "New connection from %s", conn.RemoteAddr())
 			go handle(conn, *telnetTimeout)
 		}
 	}()
@@ -150,9 +151,9 @@ func main() {
 			for {
 				conn, err := tlsln.Accept()
 				if err != nil {
-					log.Error().Err(err).Msg("Couldn't accept TLS connection")
+					l.LogWithErr(ErrorLvl, err, "Couldn't accept TLS connection")
 				}
-				log.Info().Msgf("New TLS connection from %s", conn.RemoteAddr())
+				l.Log(InfoLvl, "New TLS connection from %s", conn.RemoteAddr())
 				go handle(conn, *telnetTimeout)
 			}
 		}()
@@ -161,14 +162,14 @@ func main() {
 	quit := make(chan os.Signal)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
-	log.Info().Msg("Interrupt signal received: quitting.")
+	l.Log(InfoLvl, "Interrupt signal received: quitting.")
 	return
 }
 
 func handle(conn net.Conn, timeout int) {
 	defer conn.Close()
 	if err := go3270.NegotiateTelnet(conn); err != nil {
-		log.Error().Err(err).Msgf("couldn't negotiate connection from %s", conn.RemoteAddr())
+		l.LogWithErr(ErrorLvl, err, "couldn't negotiate connection from %s", conn.RemoteAddr())
 		return
 	}
 
@@ -189,7 +190,7 @@ func handle(conn net.Conn, timeout int) {
 				go3270.AIDPF7, go3270.AIDPF8},
 			errFieldName, 2, 33, conn)
 		if err != nil {
-			log.Error().Err(err).Msgf("err: couldn't handle screen for %s", conn.RemoteAddr())
+			l.LogWithErr(ErrorLvl, err, "couldn't handle screen for %s", conn.RemoteAddr())
 			return
 		}
 		errmsg = ""
@@ -215,7 +216,7 @@ func handle(conn net.Conn, timeout int) {
 		case go3270.AIDEnter:
 			break
 		default:
-			log.Error().Msgf("Somehow we got an unexpected key from HandleScreen()")
+			l.Log(ErrorLvl, "Somehow we got an unexpected key from HandleScreen()")
 			continue
 		}
 
@@ -228,17 +229,17 @@ func handle(conn net.Conn, timeout int) {
 		config.Servers[selection].Port)
 
 	if err := go3270.UnNegotiateTelnet(conn, time.Second*time.Duration(timeout)); err != nil {
-		log.Error().Err(err).Msgf("Couldn't unnegotiate client")
+		l.LogWithErr(ErrorLvl, err, "Couldn't unnegotiate client")
 		return
 	}
 
-	log.Info().Msgf("Connecting client %s to server %s", conn.RemoteAddr(), remote)
+	l.Log(InfoLvl, "Connecting client %s to server %s", conn.RemoteAddr(), remote)
 	if err := proxy(conn, config.Servers[selection].Host,
 		config.Servers[selection].Port, config.Servers[selection].UseTLS,
 		config.Servers[selection].IgnoreCertValidation); err != nil {
-		log.Error().Err(err).Msgf("Error proxying to %s", remote)
+		l.LogWithErr(ErrorLvl, err, "Error proxying to %s", remote)
 	}
-	log.Info().Msgf("Client %s session ended", conn.RemoteAddr())
+	l.Log(InfoLvl, "Client %s session ended", conn.RemoteAddr())
 }
 
 func buildScreen(config *Config, session *userSession, errmsg string) (go3270.Screen, go3270.Rules) {

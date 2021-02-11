@@ -26,8 +26,6 @@ import (
 	"net"
 	"sync"
 	"time"
-
-	"github.com/rs/zerolog/log"
 )
 
 func proxy(client net.Conn, targetHost string, targetPort uint, useTLS, ignoreCertErrors bool) error {
@@ -57,10 +55,10 @@ func proxy(client net.Conn, targetHost string, targetPort uint, useTLS, ignoreCe
 
 	select {
 	case <-serverdone:
-		log.Debug().Msg("got serverdone")
+		l.Log(DebugLvl, "got serverdone")
 		clientend <- true
 	case <-clientdone:
-		log.Debug().Msg("got clientdone")
+		l.Log(DebugLvl, "got clientdone")
 		serverend <- true
 	}
 
@@ -73,16 +71,16 @@ func readAndFeed(name string, in, out net.Conn, wg *sync.WaitGroup, end, done ch
 	defer func() {
 		close(done)
 		in.SetReadDeadline(time.Time{})
-		log.Debug().Msgf("ending readAndFeed(): %s", name)
+		l.Log(DebugLvl, "ending readAndFeed(): %s", name)
 		wg.Done()
 	}()
-	log.Debug().Msgf("starting readAndFeed(): %s", name)
+	l.Log(DebugLvl, "starting readAndFeed(): %s", name)
 	buffer := make([]byte, 1024)
 	finish := false
 	for !finish {
 		select {
 		case <-end:
-			log.Debug().Msgf("%s got end signal", name)
+			l.Log(DebugLvl, "%s got end signal", name)
 			finish = true
 		default:
 			in.SetReadDeadline(time.Now().Add(time.Second / 2))
@@ -90,15 +88,15 @@ func readAndFeed(name string, in, out net.Conn, wg *sync.WaitGroup, end, done ch
 			if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
 				continue
 			} else if err == io.EOF {
-				log.Debug().Msgf("connection closed: %s", name)
+				l.Log(DebugLvl, "connection closed: %s", name)
 				return
 			} else if err != nil {
-				log.Error().Err(err).Msgf("read error: %s", name)
+				l.LogWithErr(ErrorLvl, err, "read error: %s", name)
 				return
 			}
-			log.Trace().Hex("data", buffer[:n]).Msgf("%s read", name)
+			l.Log(TraceLvl, "%s read data: [%X]", name, buffer[:n])
 			if _, err := out.Write(buffer[:n]); err != nil {
-				log.Error().Err(err).Msgf("write error: %s", name)
+				l.LogWithErr(ErrorLvl, err, "write error: %s", name)
 				return
 			}
 		}
