@@ -1,30 +1,36 @@
 Proxy3270, a 3270 forwarding service
 ====================================
 
-[Proxy3270](https://github.com/racingmars/proxy3270) allows a user to open a 3270 session to the server and choose from a list of other 3270 servers to connect to. This allows you to have several services in your network and provide one point of access--the Proxy3270 service.
+[Proxy3270](https://github.com/racingmars/proxy3270) allows a user to open a 3270 session to the server and choose from a list of other 3270 servers to connect to. This allows you to have several services in your network and provide one point of access--the Proxy3270 service. Proxy3270 supports TLS connects to itself and to the hosts it connects to.
 
-**This should be considered a proof-of-concept prototype at this stage.** I have some plans for the future, but at the moment the service is very simple: it is statically configured from a JSON configuration file, and it will allow the user to choose a service to connect to, then disconnect when/if the remote server session is done.
+I have some plans for the future, but at the moment the service is very simple: it is statically configured from a JSON configuration file, and it will allow the user to choose a service to connect to, then disconnect when/if the remote server session is done.
 
 Usage
 -----
 
 Build the project with the usual `go build`, resulting in the proxy3270 binary. Create a configuration file (see `config.sample.json`) named `config.json` with your hosts -- right now, you may have up to 26 hosts and the names may be up to 30 characters long. Then, run proxy3270. By default, it will listen on port 3270. You may also use a few flags:
 
- - `-port <port>` set the port number to listen on.
+ - `-port <port>` set the port number to listen on. (Default 3270)
  - `-debug` enable debug logging level.
  - `-debug3270` enable debug output in the go3270 library.
  - `-trace` enable trace logging level (logs all data received from clients and servers during forwarding).
  - `-config <file>` use a config file other than config.json.
  - `-telnetTimeout <seconds>` set the time to wait for 3270 client response during "un-negotiation" before forwarding to remote host. The default of 1 second should be fine in most cases, but if using IBM PCOMM, I need to set this to 5 seconds.
 
+To enable the TLS listener:
+
+ - `-enabletls` Enables the TLS listener.
+ - `-pubkey <filename>` PEM-encoded X.509 certificate for this server, with optional intermediate bundle after the server certificate. (Default pubkey.pem)
+ - `-privkey <filename>` Unencrypted private key for the certificate in the public key file. (Default privkey.pem)
+ - `-tlsport <port>` Port number for the TLS listener. (Default 4270)
+
 Limitations
 -----------
 
 (Some of these will change in the future)
 
- - You may have up to 26 hosts in your configuration file.
- - Server names are limited to 30 characters.
- - Connecting to TLS services is not supported.
+ - You may have up to 999 hosts in your configuration file.
+ - Server names are limited to 65 characters.
  - To change the configuration, you must restart the server (which will drop all active connections).
 
 Other Notes

@@ -1,12 +1,18 @@
-[
-    {
-        "name": "My MVS 3.8 System",
-        "host": "192.168.64.201",
-        "port": 3201
-    },
-    {
-        "name": "z/OS 2.4 zD&T",
-        "host": "mw03.lab.mattwilson.org",
-        "port": 23
-    }
-]
+{
+    "title": "3270 Proxy Application",
+    "disclaimer": "WARNING: All activity on this system is logged and monitored. Authorized use only.",
+    "servers": [
+        {
+            "name": "My MVS 3.8 System",
+            "host": "192.168.64.201",
+            "port": 3201
+        },
+        {
+            "name": "z/OS 2.4 zD&T",
+            "host": "mw03.lab.mattwilson.org",
+            "port": 2023,
+            "secure": true,
+            "ignoreCertValidation": false
+        }
+    ]
+}
