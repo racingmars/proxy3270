@@ -168,7 +168,7 @@ func main() {
 
 func handle(conn net.Conn, timeout int) {
 	defer conn.Close()
-	if err := go3270.NegotiateTelnet(conn); err != nil {
+	if _, err := go3270.NegotiateTelnet(conn); err != nil {
 		l.LogWithErr(ErrorLvl, err, "couldn't negotiate connection from %s", conn.RemoteAddr())
 		return
 	}
