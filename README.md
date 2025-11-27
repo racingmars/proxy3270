@@ -15,6 +15,7 @@ Build the project with the usual `go build`, resulting in the proxy3270 binary. 
  - `-debug3270` enable debug output in the go3270 library.
  - `-trace` enable trace logging level (logs all data received from clients and servers during forwarding).
  - `-config <file>` use a config file other than config.json.
+ - `-unnegotiate` will attempt to "un-negotiate" the telnet options for 3270 before connecting the client to the selected target host. I've found this isn't necessary with the 3270 emulators I use, but if you encounter weird behavior with your emulator, try enabling this option.
  - `-telnetTimeout <seconds>` set the time to wait for 3270 client response during "un-negotiation" before forwarding to remote host. The default of 1 second should be fine in most cases, but if using IBM PCOMM, I need to set this to 5 seconds.
 
 To enable the TLS listener:

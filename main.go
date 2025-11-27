@@ -35,12 +35,13 @@ import (
 )
 
 type userSession struct {
+	devinfo    go3270.DevInfo
+	pagesize   int
 	page       int
 	totalPages int
 }
 
 const errFieldName = "errmessage"
-const pageSize = 12
 
 var config *Config
 
@@ -62,6 +63,7 @@ func main() {
 	privkey := flag.String("privkey", "privkey.pem", "private key (PEM)")
 	tlsenable := flag.Bool("tlsenable", false, "Enable TLS listener?")
 	configFile := flag.String("config", "config.json", "configuration file path")
+	unnegotiate := flag.Bool("unnegotiate", false, "Attempt to un-negotiate the 3270 telnet options before handing the client to the selected target host")
 	telnetTimeout := flag.Int("telnetTimeout", 1, "length of time to wait for telnet command response from clients when un-negotiating the 3270 session")
 	logFile := flag.String("log", "", "log file name to enable logging to a file")
 	flag.Parse()
@@ -141,7 +143,7 @@ func main() {
 				l.LogWithErr(ErrorLvl, err, "Couldn't accept connection")
 			}
 			l.Log(InfoLvl, "New connection from %s", conn.RemoteAddr())
-			go handle(conn, *telnetTimeout)
+			go handle(conn, *telnetTimeout, *unnegotiate)
 		}
 	}()
 
@@ -154,7 +156,7 @@ func main() {
 					l.LogWithErr(ErrorLvl, err, "Couldn't accept TLS connection")
 				}
 				l.Log(InfoLvl, "New TLS connection from %s", conn.RemoteAddr())
-				go handle(conn, *telnetTimeout)
+				go handle(conn, *telnetTimeout, *unnegotiate)
 			}
 		}()
 	}
@@ -163,32 +165,37 @@ func main() {
 	signal.Notify(quit, os.Interrupt)
 	<-quit
 	l.Log(InfoLvl, "Interrupt signal received: quitting.")
-	return
 }
 
-func handle(conn net.Conn, timeout int) {
+func handle(conn net.Conn, timeout int, unnegotiate bool) {
 	defer conn.Close()
-	if _, err := go3270.NegotiateTelnet(conn); err != nil {
+	devinfo, err := go3270.NegotiateTelnet(conn)
+	if err != nil {
 		l.LogWithErr(ErrorLvl, err, "couldn't negotiate connection from %s", conn.RemoteAddr())
 		return
 	}
 
-	session := &userSession{}
-	session.totalPages = len(config.Servers) / pageSize
-	if session.totalPages*pageSize < len(config.Servers) {
+	rows, _ := devinfo.AltDimensions()
+	session := &userSession{
+		devinfo:  devinfo,
+		pagesize: rows - 12,
+	}
+	session.totalPages = len(config.Servers) / session.pagesize
+	if session.totalPages*session.pagesize < len(config.Servers) {
 		session.totalPages++
 	}
 
 	var response go3270.Response
 	var errmsg string
 	for {
-		screen, rules := buildScreen(config, session, "")
+		screen, rules := buildScreen(config, session)
 		var err error
-		response, err = go3270.HandleScreen(screen, rules,
+		response, err = go3270.HandleScreenAlt(screen, rules,
 			map[string]string{errFieldName: errmsg},
 			[]go3270.AID{go3270.AIDEnter}, []go3270.AID{go3270.AIDPF3,
 				go3270.AIDPF7, go3270.AIDPF8},
-			errFieldName, 2, 33, conn)
+			errFieldName, 2, 33, conn, session.devinfo,
+			session.devinfo.Codepage())
 		if err != nil {
 			l.LogWithErr(ErrorLvl, err, "couldn't handle screen for %s", conn.RemoteAddr())
 			return
@@ -216,7 +223,7 @@ func handle(conn net.Conn, timeout int) {
 		case go3270.AIDEnter:
 			break
 		default:
-			l.Log(ErrorLvl, "Somehow we got an unexpected key from HandleScreen()")
+			l.Log(ErrorLvl, "Somehow we got an unexpected key from HandleScreenAlt()")
 			continue
 		}
 
@@ -228,9 +235,12 @@ func handle(conn net.Conn, timeout int) {
 	remote := fmt.Sprintf("%s:%d", config.Servers[selection].Host,
 		config.Servers[selection].Port)
 
-	if err := go3270.UnNegotiateTelnet(conn, time.Second*time.Duration(timeout)); err != nil {
-		l.LogWithErr(ErrorLvl, err, "Couldn't unnegotiate client")
-		return
+	if unnegotiate {
+		if err := go3270.UnNegotiateTelnet(conn,
+			time.Second*time.Duration(timeout)); err != nil {
+			l.LogWithErr(ErrorLvl, err, "Couldn't unnegotiate client")
+			return
+		}
 	}
 
 	l.Log(InfoLvl, "Connecting client %s to server %s", conn.RemoteAddr(), remote)
@@ -242,37 +252,42 @@ func handle(conn net.Conn, timeout int) {
 	l.Log(InfoLvl, "Client %s session ended", conn.RemoteAddr())
 }
 
-func buildScreen(config *Config, session *userSession, errmsg string) (go3270.Screen, go3270.Rules) {
+func buildScreen(config *Config, session *userSession) (go3270.Screen, go3270.Rules) {
 	screen := make(go3270.Screen, 0)
 	rules := make(go3270.Rules)
 
-	discline1, discline2 := wrapDisclaimer(config.Disclaimer, 79)
-	titleStart := 39 - (len(config.Title) / 2)
+	rows, cols := session.devinfo.AltDimensions()
+
+	discline1, discline2 := wrapDisclaimer(config.Disclaimer, cols-1)
+	titleStart := cols/2 - 1 - (len(config.Title) / 2)
 	screen = append(screen, go3270.Field{Row: 0, Col: titleStart, Intense: true, Content: config.Title})
 	screen = append(screen, go3270.Field{Row: 2, Col: 2, Content: "Select service to connect to:"})
 	screen = append(screen, go3270.Field{Row: 2, Col: 32, Name: "input", Highlighting: go3270.Underscore, Write: true})
 	screen = append(screen, go3270.Field{Row: 2, Col: 36}) // Field "stop" character
-	screen = append(screen, go3270.Field{Row: 17, Col: 0, Intense: true, Color: go3270.Red, Name: errFieldName})
-	screen = append(screen, go3270.Field{Row: 19, Col: 0, Color: go3270.Red, Content: discline1})
-	screen = append(screen, go3270.Field{Row: 20, Col: 0, Color: go3270.Red, Content: discline2})
-	screen = append(screen, go3270.Field{Row: 22, Col: 0, Content: "PF3 Exit"})
+	screen = append(screen, go3270.Field{Row: rows - 7, Col: 0, Intense: true, Color: go3270.Red, Name: errFieldName})
+	screen = append(screen, go3270.Field{Row: rows - 5, Col: 0, Color: go3270.Red, Content: discline1})
+	screen = append(screen, go3270.Field{Row: rows - 4, Col: 0, Color: go3270.Red, Content: discline2})
+	screen = append(screen, go3270.Field{Row: rows - 2, Col: 0, Content: "PF3 Exit"})
 
 	if session.page > 0 {
-		screen = append(screen, go3270.Field{Row: 22, Col: 13, Content: "PF7 PgUp"})
+		screen = append(screen, go3270.Field{Row: rows - 2, Col: 13, Content: "PF7 PgUp"})
 	}
 	if session.page < session.totalPages-1 {
-		screen = append(screen, go3270.Field{Row: 22, Col: 25, Content: "PF8 PgDn"})
+		screen = append(screen, go3270.Field{Row: rows - 2, Col: 25, Content: "PF8 PgDn"})
 	}
 
-	for i := range config.Servers[session.page*pageSize:] {
-		if i > 11 {
+	for i := range config.Servers[session.page*session.pagesize:] {
+		if i > session.pagesize-1 {
 			break
 		}
 
 		const rowBase = 4
 
-		screen = append(screen, go3270.Field{Row: rowBase + i, Col: 2, Content: fmt.Sprintf("%3d", session.page*pageSize+i+1), Intense: true})
-		screen = append(screen, go3270.Field{Row: rowBase + i, Col: 6, Content: config.Servers[session.page*pageSize+i].Name})
+		screen = append(screen, go3270.Field{Row: rowBase + i, Col: 2,
+			Content: fmt.Sprintf("%3d", session.page*session.pagesize+i+1),
+			Intense: true})
+		screen = append(screen, go3270.Field{Row: rowBase + i, Col: 6,
+			Content: config.Servers[session.page*session.pagesize+i].Name})
 	}
 
 	v := func(input string) bool {
