@@ -161,7 +161,7 @@ func main() {
 		}()
 	}
 
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
 	<-quit
 	l.Log(InfoLvl, "Interrupt signal received: quitting.")
@@ -221,7 +221,7 @@ func handle(conn net.Conn, timeout int, unnegotiate bool) {
 			session.page++
 			continue
 		case go3270.AIDEnter:
-			break
+			// no-op, will exit the for loop with the break a few lines down
 		default:
 			l.Log(ErrorLvl, "Somehow we got an unexpected key from HandleScreenAlt()")
 			continue
