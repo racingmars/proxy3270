@@ -63,7 +63,7 @@ func main() {
 	privkey := flag.String("privkey", "privkey.pem", "private key (PEM)")
 	tlsenable := flag.Bool("tlsenable", false, "Enable TLS listener?")
 	configFile := flag.String("config", "config.json", "configuration file path")
-	unnegotiate := flag.Bool("unnegotiate", false, "Attempt to un-negotiate the 3270 telnet options before handing the client to the selected target host")
+	skipunnegotiate := flag.Bool("skipunnegotiate", false, "Skip the attempt to un-negotiate the 3270 telnet options before handing the client to the selected target host")
 	telnetTimeout := flag.Int("telnetTimeout", 1, "length of time to wait for telnet command response from clients when un-negotiating the 3270 session")
 	logFile := flag.String("log", "", "log file name to enable logging to a file")
 	flag.Parse()
@@ -143,7 +143,7 @@ func main() {
 				l.LogWithErr(ErrorLvl, err, "Couldn't accept connection")
 			}
 			l.Log(InfoLvl, "New connection from %s", conn.RemoteAddr())
-			go handle(conn, *telnetTimeout, *unnegotiate)
+			go handle(conn, *telnetTimeout, *skipunnegotiate)
 		}
 	}()
 
@@ -156,7 +156,7 @@ func main() {
 					l.LogWithErr(ErrorLvl, err, "Couldn't accept TLS connection")
 				}
 				l.Log(InfoLvl, "New TLS connection from %s", conn.RemoteAddr())
-				go handle(conn, *telnetTimeout, *unnegotiate)
+				go handle(conn, *telnetTimeout, *skipunnegotiate)
 			}
 		}()
 	}
@@ -167,7 +167,7 @@ func main() {
 	l.Log(InfoLvl, "Interrupt signal received: quitting.")
 }
 
-func handle(conn net.Conn, timeout int, unnegotiate bool) {
+func handle(conn net.Conn, timeout int, skipunnegotiate bool) {
 	defer conn.Close()
 	devinfo, err := go3270.NegotiateTelnet(conn)
 	if err != nil {
@@ -235,7 +235,7 @@ func handle(conn net.Conn, timeout int, unnegotiate bool) {
 	remote := fmt.Sprintf("%s:%d", config.Servers[selection].Host,
 		config.Servers[selection].Port)
 
-	if unnegotiate {
+	if !skipunnegotiate {
 		if err := go3270.UnNegotiateTelnet(conn,
 			time.Second*time.Duration(timeout)); err != nil {
 			l.LogWithErr(ErrorLvl, err, "Couldn't unnegotiate client")
